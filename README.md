@@ -56,3 +56,24 @@ ETL Learning Project Using Airflow
 
 - It's an example of my DAG that using dynamic TaskGroup in extract process:
 ![Chinook](dag_chinook.png)
+
+
+## Checklist
+
+[x] Make every DAG atomic
+
+[x] TaskGroup / SubDAG
+
+[x] Dynamic Task based on files/tables
+
+[x] DRY, KISS Principle
+
+[x] Add python package to Airflow Docker Image
+
+[ ] Explore DAG designing
+
+[ ] Explore Airflow Docker image
+
+[ ] Explore Google Cloud
+
+[ ] Explore data warehousing
