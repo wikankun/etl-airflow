@@ -1,13 +1,17 @@
+import os.path
 import time
 import sqlite3
 import pandas as pd
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.dummy import DummyOperator
+from airflow.utils.task_group import TaskGroup
 from airflow.utils.dates import days_ago
+from helper import find_file_names
 
 TIMESTAMP = time.strftime("%Y%m%d")
 OUTPUT_DB = './output/sqlite/output.db'
+FILE_NAMES = find_file_names('./data/reviews_*')
 
 default_args = {
     'owner': 'wikan',
@@ -24,25 +28,27 @@ with DAG(
     dag.doc_md = __doc__
 
     def extract_transform(**kwargs):
-        ti = kwargs['ti']
+        filename = kwargs['filename']
         output_target = './output/' + TIMESTAMP + '_review.csv'
 
-        review1 = pd.read_csv('./data/reviews_q1.csv')
-        review2 = pd.read_csv('./data/reviews_q2.csv')
-        review3 = pd.read_csv('./data/reviews_q3.csv')
-        review4 = pd.read_csv('./data/reviews_q4.csv')
-        review5 = pd.read_excel('./data/reviews_q1.xlsx', engine='openpyxl')
+        if os.path.isfile(output_target):
+            df1 = pd.read_csv(output_target)
+        else:
+            df1 = pd.DataFrame()
 
-        frames = [review1, review2, review3, review4, review5]
+        if filename.split('.')[-1] == 'csv':
+            df2 = pd.read_csv(filename)
+        elif filename.split('.')[-1] == 'xlsx':
+            df2 = pd.read_excel(filename, engine='openpyxl')
+
+        frames = [df1, df2]
 
         df = pd.concat(frames)
         df.drop_duplicates(subset=['id'], inplace=True)
         df.to_csv(output_target, index=False, header=True, quoting=2)
-        ti.xcom_push('filename', output_target)
 
     def load(**kwargs):
-        ti = kwargs['ti']
-        input_target = ti.xcom_pull(task_ids='extract_transform', key='filename')
+        input_target = './output/' + TIMESTAMP + '_review.csv'
         conn = sqlite3.connect(OUTPUT_DB)
 
         with conn:
@@ -52,11 +58,15 @@ with DAG(
     start = DummyOperator(
         task_id='start',
     )
-    
-    extract_transform_task = PythonOperator(
-        task_id='extract_transform',
-        python_callable=extract_transform,
-    )
+
+    with TaskGroup("extract_transform_task") as extract_transform_task:
+        for filename in FILE_NAMES:
+            f = filename.split('/')[-1]
+            next_task = PythonOperator(
+                task_id='extract_transform_{}'.format(f),
+                python_callable=extract_transform,
+                op_kwargs={'filename': filename},
+            )
 
     load_task = PythonOperator(
         task_id='load',
